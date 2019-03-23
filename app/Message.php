@@ -6,6 +6,8 @@ use Movim\Model;
 use Movim\Picture;
 use Movim\Route;
 
+use Illuminate\Database\QueryException;
+
 class Message extends Model
 {
     protected $primaryKey = ['user_id', 'jidfrom', 'id'];
@@ -25,6 +27,11 @@ class Message extends Model
     public function user()
     {
         return $this->belongsTo('App\User');
+    }
+
+    public function reactions()
+    {
+        return $this->hasMany('App\Reaction');
     }
 
     public function setFileAttribute(array $file)
@@ -123,6 +130,41 @@ class Message extends Model
 
             if ($stanza->body) {
                 $this->body = (string)$stanza->body;
+            }
+
+            # XEP-0367: Message Attaching
+            if (isset($stanza->{'attach-to'})
+            && $stanza->{'attach-to'}->attributes()->xmlns == 'urn:xmpp:message-attaching:1') {
+                $reaction = new Reaction;
+
+                $query = Message::where([
+                    'user_id' => $this->user_id,
+                    'replaceid' => $stanza->{'attach-to'}->attributes()->id,
+                ]);
+
+                $query = ($this->type == 'chatroom')
+                    ? $query->where('jidfrom', $this->jidfrom)
+                    : $query->where(function ($query)  {
+                            $query->where('jidfrom', $this->jidfrom)
+                                  ->orWhere('jidto', $this->jidfrom);
+                        });
+                $parentMessage = $query->first();
+
+                $emoji = \Movim\Emoji::getInstance();
+                $emoji->replace($this->body);
+
+                if ($parentMessage && $emoji->isSingleEmoji()) {
+                    $reaction->message_mid = $parentMessage->mid;
+                    $reaction->emoji = $this->body;
+                    $reaction->jidfrom = $this->jidfrom;
+
+                    try {
+                        $reaction->save();
+                        return $reaction;
+                    } catch (QueryException $exception) {
+                        // Duplicate ?
+                    }
+                }
             }
 
             # HipChat MUC specific cards
@@ -272,6 +314,8 @@ class Message extends Model
             $this->body = (string)$stanza->x->attributes()->reason;
             $this->subject = (string)$stanza->x->attributes()->jid;
         }
+
+        return $this;
     }
 
     public function isTrusted()

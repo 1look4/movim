@@ -16,7 +16,7 @@ class MAMResult extends Payload
         && isset($stanza->attributes()->queryid)
         && $session->get('mamid'.(string)$stanza->attributes()->queryid) == true) {
             $message = \App\Message::findByStanza($stanza->forwarded->message);
-            $message->set($stanza->forwarded->message, $stanza->forwarded);
+            $message = $message->set($stanza->forwarded->message, $stanza->forwarded);
 
             if ($message->type == 'groupchat') {
                 $message->jidfrom = current(explode('/', ($message->jidfrom)));
@@ -24,6 +24,10 @@ class MAMResult extends Payload
 
             if (!empty($to) && empty($message->jidto)) {
                 $message->jidto = $to;
+            }
+
+            if ($message instanceof Reaction) {
+                return;
             }
 
             if (!$message->isOTR()

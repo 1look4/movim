@@ -3,6 +3,7 @@
 namespace Moxl\Xec\Payload;
 
 use Movim\ChatStates;
+use App\Reaction;
 
 class Message extends Payload
 {
@@ -31,7 +32,11 @@ class Message extends Payload
         }
 
         $message = \App\Message::findByStanza($stanza);
-        $message->set($stanza, $parent);
+        $message = $message->set($stanza, $parent);
+
+        if ($message instanceof Reaction) {
+            return;
+        }
 
         if (!$message->isOTR()
         && (!$message->isEmpty() || $message->isSubject())) {
